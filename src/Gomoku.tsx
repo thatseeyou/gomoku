@@ -124,7 +124,7 @@ export default function Gomoku() {
   if (!started) { return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Sans KR','Pretendard',sans-serif", background: "linear-gradient(145deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)", color: "#e0e0e0", padding: "24px", gap: "20px" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet" />
-      <h1 style={{ fontSize: "40px", fontWeight: 900, margin: 0, background: "linear-gradient(135deg,#e2c391,#f5deb3,#d4a853)", backgroundClip: "text", WebkitBackgroundClip: "text", color: "transparent", WebkitTextFillColor: "transparent", letterSpacing: "10px" }}>五 目</h1>
+      <h1 className="gold-text" style={{ fontSize: "40px", letterSpacing: "10px" }}>五 目</h1>
       <p style={{ fontSize: "12px", color: "#8892a4", letterSpacing: "4px", margin: 0 }}>RENJU RULE — AI CHALLENGE</p>
 
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", marginTop: "8px" }}>
@@ -151,7 +151,7 @@ export default function Gomoku() {
       </div>
 
       <button onClick={() => start(playerColor)} style={{ padding: "14px 48px", borderRadius: "28px", fontSize: "16px", fontWeight: 900, background: "linear-gradient(135deg,#e2c391,#d4a853)", color: "#1a1a2e", border: "none", cursor: "pointer", boxShadow: "0 4px 20px rgba(212,168,83,0.3)", letterSpacing: "4px", transition: "all 0.2s" }}>게 임 시 작</button>
-      <style>{`button:hover{transform:translateY(-2px);filter:brightness(1.1);}`}</style>
+      <style>{`.gold-text{font-weight:900;margin:0;background:linear-gradient(135deg,#e2c391,#f5deb3,#d4a853);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;}button:hover{transform:translateY(-2px);filter:brightness(1.1);}`}</style>
     </div>
   ); }
 
@@ -162,7 +162,7 @@ export default function Gomoku() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Noto Sans KR','Pretendard',sans-serif", background: "linear-gradient(145deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)", color: "#e0e0e0", padding: "12px", gap: "8px" }}>
       <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet" />
-      <h1 style={{ fontSize: "24px", fontWeight: 900, margin: 0, background: "linear-gradient(135deg,#e2c391,#d4a853)", backgroundClip: "text", WebkitBackgroundClip: "text", color: "transparent", WebkitTextFillColor: "transparent", letterSpacing: "6px" }}>五 目</h1>
+      <h1 className="gold-text" style={{ fontSize: "24px", letterSpacing: "6px" }}>五 目</h1>
 
       <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "#8892a4", flexWrap: "wrap", justifyContent: "center" }}>
         <span>당신: {playerColor === BLACK ? "● 흑 (선공)" : "○ 백 (후공)"}</span>
@@ -176,7 +176,7 @@ export default function Gomoku() {
 
       {alertMsg && <div style={{ padding: "8px 20px", borderRadius: "8px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", fontSize: "13px", fontWeight: 600, animation: "shakeX 0.4s ease" }}>{alertMsg}</div>}
 
-      <svg width={bpx} height={bpx} viewBox={`0 0 ${bpx} ${bpx}`} style={{ borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.5)", cursor: gameOver || thinking || !isMyTurn ? "default" : "pointer" }}>
+      <svg viewBox={`0 0 ${bpx} ${bpx}`} style={{ width: "100%", maxWidth: `${bpx}px`, aspectRatio: "1", borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.5)", cursor: gameOver || thinking || !isMyTurn ? "default" : "pointer" }}>
         <defs>
           <radialGradient id="bg" cx="50%" cy="50%" r="70%"><stop offset="0%" stopColor="#d4a24e" /><stop offset="100%" stopColor="#b8862d" /></radialGradient>
           <filter id="ss"><feDropShadow dx="1" dy="2" stdDeviation="2" floodOpacity="0.4" /></filter>
@@ -226,7 +226,7 @@ export default function Gomoku() {
       )}
 
       <div style={{ fontSize: "10px", color: "#4b5563", textAlign: "center" }}>렌주 룰 (흑돌 금수) | 반복 심화 + 위협 탐색 + TT + Killer</div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg);}}@keyframes shakeX{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(2px)}}button:hover:not(:disabled){background:rgba(255,255,255,0.14)!important;transform:translateY(-1px);}`}</style>
+      <style>{`.gold-text{font-weight:900;margin:0;background:linear-gradient(135deg,#e2c391,#f5deb3,#d4a853);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;}@keyframes spin{to{transform:rotate(360deg);}}@keyframes shakeX{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(2px)}}button:hover:not(:disabled){background:rgba(255,255,255,0.14)!important;transform:translateY(-1px);}`}</style>
     </div>
   );
 }
