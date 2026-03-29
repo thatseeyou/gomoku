@@ -12,7 +12,11 @@ declare global {
 // ── SOUND ──
 function useSound() {
   const ac = useRef<AudioContext | null>(null);
-  const cx = (): AudioContext => { if (!ac.current) ac.current = new (window.AudioContext || window.webkitAudioContext)(); return ac.current; };
+  const cx = (): AudioContext => {
+    if (!ac.current) { ac.current = new (window.AudioContext || window.webkitAudioContext)(); }
+    if (ac.current.state === "suspended") { ac.current.resume(); }
+    return ac.current;
+  };
   const playPlace = useCallback(() => { try { const c = cx(), o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(800, c.currentTime); o.frequency.exponentialRampToValueAtTime(400, c.currentTime + 0.08); g.gain.setValueAtTime(0.15, c.currentTime); g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.1); o.start(c.currentTime); o.stop(c.currentTime + 0.1); } catch (_) { /* no audio */ } }, []);
   const playForbidden = useCallback(() => { try { const c = cx(), o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.type = "square"; o.frequency.setValueAtTime(200, c.currentTime); g.gain.setValueAtTime(0.1, c.currentTime); g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.2); o.start(c.currentTime); o.stop(c.currentTime + 0.2); } catch (_) { /* no audio */ } }, []);
   const playWin = useCallback(() => { try { const c = cx(); [523, 659, 784, 1047].forEach((f, i) => { const o = c.createOscillator(), g = c.createGain(); o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(f, c.currentTime + i * 0.15); g.gain.setValueAtTime(0.12, c.currentTime + i * 0.15); g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + i * 0.15 + 0.3); o.start(c.currentTime + i * 0.15); o.stop(c.currentTime + i * 0.15 + 0.3); }); } catch (_) { /* no audio */ } }, []);
