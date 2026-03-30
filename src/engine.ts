@@ -10,364 +10,811 @@ export type DiffKey = "easy" | "medium" | "hard" | "expert";
 export type ForbiddenReason = "33" | "44" | "overline";
 
 export interface DiffConfig {
-  label: string; emoji: string; maxD: number; maxC: number;
-  time: number; thr: number; color: string; desc: string;
+  label: string;
+  emoji: string;
+  maxD: number;
+  maxC: number;
+  time: number;
+  thr: number;
+  color: string;
+  desc: string;
 }
 
 export interface FindBestResult {
-  move: Pos | null; nodes: number; depth: number;
+  move: Pos | null;
+  nodes: number;
+  depth: number;
 }
 
-interface LineInfoResult { s: number; oe: number; }
-interface TTEntry { s: number; d: number; f: 0 | 1 | 2; }
+interface LineInfoResult {
+  /** total consecutive stones (including the stone at r,c) */
+  s: number;
+  /** number of open ends (0, 1, or 2) */
+  oe: number;
+}
+
+interface TTEntry {
+  s: number;
+  d: number;
+  f: 0 | 1 | 2;
+}
 
 // ── Constants ──
+
 export const createBoard = (): Board =>
   Array.from({ length: N }, () => Array(N).fill(EMPTY) as Stone[]);
 
-export const DIR: [number, number][] = [[0,1],[1,0],[1,1],[1,-1]];
-const ib = (r: number, c: number): boolean => r >= 0 && r < N && c >= 0 && c < N;
+/** 4 directions: horizontal, vertical, diagonal ↘, diagonal ↗ */
+export const DIR: [number, number][] = [
+  [0, 1],
+  [1, 0],
+  [1, 1],
+  [1, -1],
+];
+
+/** in-bounds check */
+const inBounds = (r: number, c: number): boolean =>
+  r >= 0 && r < N && c >= 0 && c < N;
 
 export const DIFF: Record<DiffKey, DiffConfig> = {
-  easy:   { label:"초급", emoji:"🌱", maxD:2,  maxC:8,  time:200,  thr:0,  color:"#4ade80", desc:"깊이 2 · 후보 8수" },
-  medium: { label:"중급", emoji:"⚔️",  maxD:4,  maxC:12, time:1000, thr:4,  color:"#fbbf24", desc:"깊이 4 · 위협 탐색 4" },
-  hard:   { label:"상급", emoji:"🔥", maxD:6,  maxC:15, time:3000, thr:8,  color:"#f87171", desc:"깊이 6 · 위협 탐색 8" },
-  expert: { label:"최강", emoji:"💀", maxD:10, maxC:20, time:8000, thr:16, color:"#a855f7", desc:"반복 심화 · 위협 탐색 16" },
+  easy: {
+    label: "초급", emoji: "🌱", maxD: 2, maxC: 8,
+    time: 200, thr: 0, color: "#4ade80", desc: "깊이 2 · 후보 8수",
+  },
+  medium: {
+    label: "중급", emoji: "⚔️", maxD: 4, maxC: 12,
+    time: 1000, thr: 4, color: "#fbbf24", desc: "깊이 4 · 위협 탐색 4",
+  },
+  hard: {
+    label: "상급", emoji: "🔥", maxD: 6, maxC: 15,
+    time: 3000, thr: 8, color: "#f87171", desc: "깊이 6 · 위협 탐색 8",
+  },
+  expert: {
+    label: "최강", emoji: "💀", maxD: 10, maxC: 20,
+    time: 8000, thr: 16, color: "#a855f7", desc: "반복 심화 · 위협 탐색 16",
+  },
 };
 
-export const SC = { FIVE:1e7, OF:5e5, FOUR:5e4, OT:2e4, THREE:2e3, OW:500, TWO:100, ONE:10 };
+export const SC = {
+  FIVE: 1e7,
+  OF: 5e5,
+  FOUR: 5e4,
+  OT: 2e4,
+  THREE: 2e3,
+  OW: 500,
+  TWO: 100,
+  ONE: 10,
+};
 
+// ────────────────────────────────────────────────────────────────
 // ── RENJU FORBIDDEN (BLACK only) ──
-export function lineInfo(b: Board, r: number, c: number, dr: number, dc: number, p: Stone): LineInfoResult {
-  let f = 0, nr = r + dr, nc = c + dc;
-  while (ib(nr, nc) && b[nr][nc] === p) { f++; nr += dr; nc += dc; }
-  const oa = ib(nr, nc) && b[nr][nc] === EMPTY;
-  let bw = 0; nr = r - dr; nc = c - dc;
-  while (ib(nr, nc) && b[nr][nc] === p) { bw++; nr -= dr; nc -= dc; }
-  const ob = ib(nr, nc) && b[nr][nc] === EMPTY;
-  return { s: f + bw + 1, oe: (ob ? 1 : 0) + (oa ? 1 : 0) };
+// ────────────────────────────────────────────────────────────────
+
+interface Cell {
+  r: number;
+  c: number;
+  v: Stone;
 }
 
+/**
+ * Count consecutive same-color stones through (r,c) in the given direction,
+ * plus how many ends are open (EMPTY).
+ */
+export function lineInfo(
+  b: Board, r: number, c: number,
+  dr: number, dc: number, p: Stone,
+): LineInfoResult {
+  // count forward
+  let fwd = 0;
+  let nr = r + dr, nc = c + dc;
+  while (inBounds(nr, nc) && b[nr][nc] === p) { fwd++; nr += dr; nc += dc; }
+  const openAhead = inBounds(nr, nc) && b[nr][nc] === EMPTY;
+
+  // count backward
+  let bwd = 0;
+  nr = r - dr; nc = c - dc;
+  while (inBounds(nr, nc) && b[nr][nc] === p) { bwd++; nr -= dr; nc -= dc; }
+  const openBehind = inBounds(nr, nc) && b[nr][nc] === EMPTY;
+
+  return {
+    s: fwd + bwd + 1,
+    oe: (openBehind ? 1 : 0) + (openAhead ? 1 : 0),
+  };
+}
+
+/** Does placing BLACK at (r,c) create exactly 5 in a row? */
 export function exact5(b: Board, r: number, c: number): boolean {
-  for (const [dr, dc] of DIR) if (lineInfo(b, r, c, dr, dc, BLACK).s === 5) return true;
+  for (const [dr, dc] of DIR) {
+    if (lineInfo(b, r, c, dr, dc, BLACK).s === 5) return true;
+  }
   return false;
 }
 
+/** Does placing BLACK at (r,c) create 6+ in a row (overline / 장목)? */
 export function overline(b: Board, r: number, c: number): boolean {
-  for (const [dr, dc] of DIR) if (lineInfo(b, r, c, dr, dc, BLACK).s >= 6) return true;
+  for (const [dr, dc] of DIR) {
+    if (lineInfo(b, r, c, dr, dc, BLACK).s >= 6) return true;
+  }
   return false;
 }
 
-function openThreeDir(b: Board, r: number, c: number, dr: number, dc: number, depth: number = 0): boolean {
-  const ln: { r: number; c: number; v: Stone }[] = [];
+/**
+ * Extract a line of up to `maxLen` cells through (r,c) along (dr,dc),
+ * starting up to `backSteps` steps behind (r,c).
+ */
+function extractLine(
+  b: Board, r: number, c: number,
+  dr: number, dc: number,
+  backSteps: number, maxLen: number,
+): Cell[] {
+  // walk backward to find the start of the scan window
   let sr = r, sc = c;
-  for (let i = 0; i < 6; i++) { const p = sr - dr, q = sc - dc; if (!ib(p, q)) break; sr = p; sc = q; }
+  for (let i = 0; i < backSteps; i++) {
+    const pr = sr - dr, pc = sc - dc;
+    if (!inBounds(pr, pc)) break;
+    sr = pr; sc = pc;
+  }
+
+  // collect cells forward
+  const line: Cell[] = [];
   let cr = sr, cc = sc;
-  while (ib(cr, cc) && ln.length < 12) { ln.push({ r: cr, c: cc, v: b[cr][cc] }); cr += dr; cc += dc; }
-  const mi = ln.findIndex(p => p.r === r && p.c === c);
-  if (mi < 0) return false;
-  for (let s = Math.max(0, mi - 4); s <= mi && s + 4 < ln.length; s++) {
-    const w = ln.slice(s, s + 5);
-    if (w.filter(p => p.v === BLACK).length === 3 && w.filter(p => p.v === EMPTY).length === 2) {
-      for (const p of w) {
-        if (p.v !== EMPTY) continue;
-        b[p.r][p.c] = BLACK;
-        const info = lineInfo(b, p.r, p.c, dr, dc, BLACK);
-        if (info.s === 4 && info.oe === 2) {
-          // Find both open ends of this four
-          let fr = p.r + dr, fc = p.c + dc;
-          while (ib(fr, fc) && b[fr][fc] === BLACK) { fr += dr; fc += dc; }
-          let br = p.r - dr, bc = p.c - dc;
-          while (ib(br, bc) && b[br][bc] === BLACK) { br -= dr; bc -= dc; }
-          const fj = fr + dr, fk = fc + dc, bj = br - dr, bk = bc - dc;
-          const jumped = (ib(fj, fk) && b[fj][fk] === BLACK) || (ib(bj, bk) && b[bj][bk] === BLACK);
-          b[p.r][p.c] = EMPTY;
-          // Jumped four pattern — this is a four, not a three
-          if (jumped) continue;
-          // Recursive check: the move that extends three→four must not itself be forbidden
-          if (depth < 2 && isForbidden(b, p.r, p.c, depth + 1)) continue;
-          return true;
-        } else {
-          b[p.r][p.c] = EMPTY;
-        }
+  while (inBounds(cr, cc) && line.length < maxLen) {
+    line.push({ r: cr, c: cc, v: b[cr][cc] });
+    cr += dr; cc += dc;
+  }
+  return line;
+}
+
+/**
+ * Check whether the four formed by filling `pr,pc` is actually a jumped four
+ * (뛴사) — i.e. there is a BLACK stone one gap beyond either open end,
+ * meaning filling that gap would make 5. That makes this a "four", not a "three".
+ */
+function isJumpedFour(
+  b: Board, pr: number, pc: number, dr: number, dc: number,
+): boolean {
+  // walk to the forward end of the consecutive run
+  let fr = pr + dr, fc = pc + dc;
+  while (inBounds(fr, fc) && b[fr][fc] === BLACK) { fr += dr; fc += dc; }
+
+  // walk to the backward end
+  let br = pr - dr, bc = pc - dc;
+  while (inBounds(br, bc) && b[br][bc] === BLACK) { br -= dr; bc -= dc; }
+
+  // fr,fc and br,bc are the first non-BLACK cells at each end (should be EMPTY for oe=2)
+  // check one step further beyond each open end
+  const fBeyondR = fr + dr, fBeyondC = fc + dc;
+  const bBeyondR = br - dr, bBeyondC = bc - dc;
+
+  return (inBounds(fBeyondR, fBeyondC) && b[fBeyondR][fBeyondC] === BLACK)
+      || (inBounds(bBeyondR, bBeyondC) && b[bBeyondR][bBeyondC] === BLACK);
+}
+
+/**
+ * Is there an open three (활삼) through (r,c) in the given direction?
+ *
+ * An open three = a three that can become an open four (활사) in one move.
+ * The stone at (r,c) must already be placed (BLACK) before calling.
+ *
+ * The function scans 5-cell windows along the line, looking for 3B+2E patterns.
+ * For each empty cell in such a window, it simulates filling it and checks
+ * whether the result is an open four (s=4, oe=2).
+ *
+ * Additional checks:
+ *  - Jumped four exclusion: if the four has a BLACK stone beyond an open end,
+ *    it is a jumped four (뛴사), not a three.
+ *  - Recursive forbidden check: the move extending three→four must not itself
+ *    be forbidden (삼삼/사사/장목), otherwise this three is not a real open three.
+ */
+function openThreeDir(
+  b: Board, r: number, c: number,
+  dr: number, dc: number, depth: number = 0,
+): boolean {
+  const line = extractLine(b, r, c, dr, dc, 6, 12);
+  const myIdx = line.findIndex(p => p.r === r && p.c === c);
+  if (myIdx < 0) return false;
+
+  const winStart = Math.max(0, myIdx - 4);
+  const winEnd = myIdx; // inclusive start of last valid window
+
+  for (let s = winStart; s <= winEnd && s + 4 < line.length; s++) {
+    const window = line.slice(s, s + 5);
+    const blackCount = window.filter(p => p.v === BLACK).length;
+    const emptyCount = window.filter(p => p.v === EMPTY).length;
+    if (blackCount !== 3 || emptyCount !== 2) continue;
+
+    // try filling each empty cell in the window
+    for (const cell of window) {
+      if (cell.v !== EMPTY) continue;
+
+      b[cell.r][cell.c] = BLACK;
+      const info = lineInfo(b, cell.r, cell.c, dr, dc, BLACK);
+      const isOpenFour = info.s === 4 && info.oe === 2;
+
+      if (isOpenFour) {
+        b[cell.r][cell.c] = EMPTY;
+
+        // exclude jumped four patterns
+        if (isJumpedFour(b, cell.r, cell.c, dr, dc)) continue;
+
+        // recursive: the extending move itself must not be forbidden
+        if (depth < 2 && isForbidden(b, cell.r, cell.c, depth + 1)) continue;
+
+        return true;
+      } else {
+        b[cell.r][cell.c] = EMPTY;
       }
     }
   }
   return false;
 }
 
-function cntOT(b: Board, r: number, c: number, depth: number = 0): number {
-  let n = 0; b[r][c] = BLACK;
-  for (const [dr, dc] of DIR) if (openThreeDir(b, r, c, dr, dc, depth)) n++;
-  b[r][c] = EMPTY; return n;
+/** Count open threes (활삼) in all 4 directions at (r,c). */
+function countOpenThrees(b: Board, r: number, c: number, depth: number = 0): number {
+  let count = 0;
+  b[r][c] = BLACK;
+  for (const [dr, dc] of DIR) {
+    if (openThreeDir(b, r, c, dr, dc, depth)) count++;
+  }
+  b[r][c] = EMPTY;
+  return count;
 }
 
-function fourDir(b: Board, r: number, c: number, dr: number, dc: number): boolean {
-  // Consecutive four: s=4 with at least one open end
+/**
+ * Does placing BLACK at (r,c) create a four (사) in this direction?
+ * Detects both consecutive fours and jumped fours (뛴사).
+ */
+function hasFourInDir(
+  b: Board, r: number, c: number, dr: number, dc: number,
+): boolean {
+  // consecutive four: 4 stones in a row with at least one open end
   const info = lineInfo(b, r, c, dr, dc, BLACK);
   if (info.s === 4 && info.oe >= 1) return true;
-  // Jumped four: 5-cell window with 4B+1E where filling the empty makes 5
-  const ln: { r: number; c: number; v: Stone }[] = [];
-  let sr = r, sc = c;
-  for (let i = 0; i < 4; i++) { const p = sr - dr, q = sc - dc; if (!ib(p, q)) break; sr = p; sc = q; }
-  let cr = sr, cc = sc;
-  while (ib(cr, cc) && ln.length < 9) { ln.push({ r: cr, c: cc, v: b[cr][cc] }); cr += dr; cc += dc; }
-  const mi = ln.findIndex(p => p.r === r && p.c === c);
-  if (mi < 0) return false;
-  for (let s = Math.max(0, mi - 4); s <= mi && s + 4 < ln.length; s++) {
-    const w = ln.slice(s, s + 5);
-    if (w.filter(p => p.v === BLACK).length === 4 && w.filter(p => p.v === EMPTY).length === 1) {
-      const ep = w.find(p => p.v === EMPTY)!;
-      b[ep.r][ep.c] = BLACK;
-      const fi = lineInfo(b, ep.r, ep.c, dr, dc, BLACK);
-      b[ep.r][ep.c] = EMPTY;
-      if (fi.s === 5) return true;
-    }
+
+  // jumped four: 5-cell window with 4B+1E, where filling the empty makes exactly 5
+  const line = extractLine(b, r, c, dr, dc, 4, 9);
+  const myIdx = line.findIndex(p => p.r === r && p.c === c);
+  if (myIdx < 0) return false;
+
+  for (let s = Math.max(0, myIdx - 4); s <= myIdx && s + 4 < line.length; s++) {
+    const window = line.slice(s, s + 5);
+    const blackCount = window.filter(p => p.v === BLACK).length;
+    const emptyCount = window.filter(p => p.v === EMPTY).length;
+    if (blackCount !== 4 || emptyCount !== 1) continue;
+
+    const emptyCell = window.find(p => p.v === EMPTY)!;
+    b[emptyCell.r][emptyCell.c] = BLACK;
+    const fi = lineInfo(b, emptyCell.r, emptyCell.c, dr, dc, BLACK);
+    b[emptyCell.r][emptyCell.c] = EMPTY;
+
+    if (fi.s === 5) return true;
   }
   return false;
 }
 
-function cntF(b: Board, r: number, c: number): number {
-  let n = 0; b[r][c] = BLACK;
-  for (const [dr, dc] of DIR) if (fourDir(b, r, c, dr, dc)) n++;
-  b[r][c] = EMPTY; return n;
+/** Count fours (사) in all 4 directions at (r,c). */
+function countFours(b: Board, r: number, c: number): number {
+  let count = 0;
+  b[r][c] = BLACK;
+  for (const [dr, dc] of DIR) {
+    if (hasFourInDir(b, r, c, dr, dc)) count++;
+  }
+  b[r][c] = EMPTY;
+  return count;
 }
 
+/** Internal recursive forbidden check (returns boolean, no reason). */
 function isForbidden(b: Board, r: number, c: number, depth: number): boolean {
   if (b[r][c] !== EMPTY) return false;
+
   b[r][c] = BLACK;
   if (exact5(b, r, c)) { b[r][c] = EMPTY; return false; }
   if (overline(b, r, c)) { b[r][c] = EMPTY; return true; }
   b[r][c] = EMPTY;
-  if (cntF(b, r, c) >= 2) return true;
-  if (cntOT(b, r, c, depth) >= 2) return true;
+
+  if (countFours(b, r, c) >= 2) return true;
+  if (countOpenThrees(b, r, c, depth) >= 2) return true;
   return false;
 }
 
+/**
+ * Check whether placing BLACK at (r,c) is a forbidden move (금수).
+ *
+ * Renju rules (BLACK only):
+ *  1. exact 5 → always legal (overrides everything)
+ *  2. overline (6+) → forbidden (장목)
+ *  3. double four → forbidden (사사, 4-4)
+ *  4. double three → forbidden (삼삼, 3-3), with recursive check
+ *
+ * Returns the reason if forbidden, or null if legal.
+ */
 export function forbidden(b: Board, r: number, c: number): ForbiddenReason | null {
   if (b[r][c] !== EMPTY) return null;
+
   b[r][c] = BLACK;
   if (exact5(b, r, c)) { b[r][c] = EMPTY; return null; }
   if (overline(b, r, c)) { b[r][c] = EMPTY; return "overline"; }
   b[r][c] = EMPTY;
-  if (cntF(b, r, c) >= 2) return "44";
-  if (cntOT(b, r, c, 0) >= 2) return "33";
+
+  if (countFours(b, r, c) >= 2) return "44";
+  if (countOpenThrees(b, r, c, 0) >= 2) return "33";
   return null;
 }
 
+/** Scan the entire board and return all forbidden positions for BLACK. */
 export function allForbidden(b: Board): Map<string, ForbiddenReason> {
-  const f = new Map<string, ForbiddenReason>();
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-    if (b[r][c] !== EMPTY) continue;
-    const re = forbidden(b, r, c);
-    if (re) f.set(`${r},${c}`, re);
+  const result = new Map<string, ForbiddenReason>();
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (b[r][c] !== EMPTY) continue;
+      const reason = forbidden(b, r, c);
+      if (reason) result.set(`${r},${c}`, reason);
+    }
   }
-  return f;
+  return result;
 }
 
+// ────────────────────────────────────────────────────────────────
 // ── EVAL ──
-function ep(b: Board, r: number, c: number, p: Stone): number {
-  let sc = 0;
+// ────────────────────────────────────────────────────────────────
+
+/** Evaluate a single stone's contribution in all 4 directions. */
+function evalPosition(b: Board, r: number, c: number, p: Stone): number {
+  let score = 0;
+
   for (const [dr, dc] of DIR) {
-    let f = 0, nr = r + dr, nc = c + dc;
-    while (ib(nr, nc) && b[nr][nc] === p) { f++; nr += dr; nc += dc; }
-    const ao = ib(nr, nc) && b[nr][nc] === EMPTY;
-    let gf = 0;
-    if (ao) { let gr = nr + dr, gc = nc + dc; while (ib(gr, gc) && b[gr][gc] === p) { gf++; gr += dr; gc += dc; } }
-    let bw = 0; nr = r - dr; nc = c - dc;
-    while (ib(nr, nc) && b[nr][nc] === p) { bw++; nr -= dr; nc -= dc; }
-    const bo = ib(nr, nc) && b[nr][nc] === EMPTY;
-    let gb = 0;
-    if (bo) { let gr = nr - dr, gc = nc - dc; while (ib(gr, gc) && b[gr][gc] === p) { gb++; gr -= dr; gc -= dc; } }
-    const cnt = f + bw + 1, oe = (bo ? 1 : 0) + (ao ? 1 : 0);
-    if (cnt >= 5) sc += SC.FIVE;
-    else if (cnt === 4) sc += oe === 2 ? SC.OF : oe === 1 ? SC.FOUR : 0;
-    else if (cnt === 3) { sc += oe === 2 ? SC.OT : oe === 1 ? SC.THREE : 0; if (gf >= 1 && ao) sc += SC.THREE; if (gb >= 1 && bo) sc += SC.THREE; }
-    else if (cnt === 2) { sc += oe === 2 ? SC.OW : oe === 1 ? SC.TWO : 0; if (gf >= 1) sc += SC.TWO; if (gb >= 1) sc += SC.TWO; }
-    else if (cnt === 1 && oe === 2) sc += SC.ONE;
+    // count forward consecutive
+    let fwd = 0, nr = r + dr, nc = c + dc;
+    while (inBounds(nr, nc) && b[nr][nc] === p) { fwd++; nr += dr; nc += dc; }
+    const aheadOpen = inBounds(nr, nc) && b[nr][nc] === EMPTY;
+
+    // count gap-forward (stones beyond one empty)
+    let gapFwd = 0;
+    if (aheadOpen) {
+      let gr = nr + dr, gc = nc + dc;
+      while (inBounds(gr, gc) && b[gr][gc] === p) { gapFwd++; gr += dr; gc += dc; }
+    }
+
+    // count backward consecutive
+    let bwd = 0;
+    nr = r - dr; nc = c - dc;
+    while (inBounds(nr, nc) && b[nr][nc] === p) { bwd++; nr -= dr; nc -= dc; }
+    const behindOpen = inBounds(nr, nc) && b[nr][nc] === EMPTY;
+
+    // count gap-backward
+    let gapBwd = 0;
+    if (behindOpen) {
+      let gr = nr - dr, gc = nc - dc;
+      while (inBounds(gr, gc) && b[gr][gc] === p) { gapBwd++; gr -= dr; gc -= dc; }
+    }
+
+    const cnt = fwd + bwd + 1;
+    const oe = (behindOpen ? 1 : 0) + (aheadOpen ? 1 : 0);
+
+    if (cnt >= 5) {
+      score += SC.FIVE;
+    } else if (cnt === 4) {
+      score += oe === 2 ? SC.OF : oe === 1 ? SC.FOUR : 0;
+    } else if (cnt === 3) {
+      score += oe === 2 ? SC.OT : oe === 1 ? SC.THREE : 0;
+      if (gapFwd >= 1 && aheadOpen) score += SC.THREE;
+      if (gapBwd >= 1 && behindOpen) score += SC.THREE;
+    } else if (cnt === 2) {
+      score += oe === 2 ? SC.OW : oe === 1 ? SC.TWO : 0;
+      if (gapFwd >= 1) score += SC.TWO;
+      if (gapBwd >= 1) score += SC.TWO;
+    } else if (cnt === 1 && oe === 2) {
+      score += SC.ONE;
+    }
   }
-  return sc;
+  return score;
 }
 
+/** Evaluate the entire board from AI's perspective. */
 export function evalBoard(b: Board, ai: Stone): number {
-  let s = 0; const hu = ai === WHITE ? BLACK : WHITE;
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-    if (b[r][c] === ai) s += ep(b, r, c, ai);
-    else if (b[r][c] === hu) s -= ep(b, r, c, hu) * 1.15;
+  let score = 0;
+  const human = ai === WHITE ? BLACK : WHITE;
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (b[r][c] === ai) score += evalPosition(b, r, c, ai);
+      else if (b[r][c] === human) score -= evalPosition(b, r, c, human) * 1.15;
+    }
   }
-  return s;
+  return score;
 }
 
+// ────────────────────────────────────────────────────────────────
+// ── WIN DETECTION ──
+// ────────────────────────────────────────────────────────────────
+
+/** Check if player `p` has won. BLACK needs exactly 5; WHITE needs 5+. */
 export function chkWin(b: Board, p: Stone): boolean {
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-    if (b[r][c] !== p) continue;
-    for (const [dr, dc] of DIR) {
-      let n = 1;
-      for (let i = 1; i < 6; i++) { const nr = r + dr * i, nc = c + dc * i; if (ib(nr, nc) && b[nr][nc] === p) n++; else break; }
-      if (p === BLACK ? n === 5 : n >= 5) return true;
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (b[r][c] !== p) continue;
+      for (const [dr, dc] of DIR) {
+        let n = 1;
+        for (let i = 1; i < 6; i++) {
+          const nr = r + dr * i, nc = c + dc * i;
+          if (inBounds(nr, nc) && b[nr][nc] === p) n++;
+          else break;
+        }
+        if (p === BLACK ? n === 5 : n >= 5) return true;
+      }
     }
   }
   return false;
 }
 
+/** Return the winning 5-stone positions, or empty array if no win. */
 export function winStones(b: Board, p: Stone): Pos[] {
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-    if (b[r][c] !== p) continue;
-    for (const [dr, dc] of DIR) {
-      const l: Pos[] = [[r, c]];
-      for (let i = 1; i < 6; i++) { const nr = r + dr * i, nc = c + dc * i; if (ib(nr, nc) && b[nr][nc] === p) l.push([nr, nc]); else break; }
-      if (p === BLACK && l.length === 5) return l;
-      if (p === WHITE && l.length >= 5) return l.slice(0, 5);
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (b[r][c] !== p) continue;
+      for (const [dr, dc] of DIR) {
+        const stones: Pos[] = [[r, c]];
+        for (let i = 1; i < 6; i++) {
+          const nr = r + dr * i, nc = c + dc * i;
+          if (inBounds(nr, nc) && b[nr][nc] === p) stones.push([nr, nc]);
+          else break;
+        }
+        if (p === BLACK && stones.length === 5) return stones;
+        if (p === WHITE && stones.length >= 5) return stones.slice(0, 5);
+      }
     }
   }
   return [];
 }
 
+// ────────────────────────────────────────────────────────────────
 // ── AI ──
+// ────────────────────────────────────────────────────────────────
+
+/** Get candidate moves (empty cells within distance 2 of any stone). */
 export function getCands(b: Board): Pos[] {
-  const cs: Pos[] = [];
-  const has = b.some(r => r.some(c => c !== EMPTY));
-  if (!has) return [[7, 7]];
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-    if (b[r][c] !== EMPTY) continue;
-    let near = false;
-    for (let dr = -2; dr <= 2 && !near; dr++) for (let dc = -2; dc <= 2 && !near; dc++) {
-      if (!dr && !dc) continue;
-      const nr = r + dr, nc = c + dc;
-      if (ib(nr, nc) && b[nr][nc] !== EMPTY) near = true;
+  const hasAnyStone = b.some(row => row.some(cell => cell !== EMPTY));
+  if (!hasAnyStone) return [[7, 7]];
+
+  const candidates: Pos[] = [];
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (b[r][c] !== EMPTY) continue;
+      let near = false;
+      for (let dr = -2; dr <= 2 && !near; dr++) {
+        for (let dc = -2; dc <= 2 && !near; dc++) {
+          if (!dr && !dc) continue;
+          const nr = r + dr, nc = c + dc;
+          if (inBounds(nr, nc) && b[nr][nc] !== EMPTY) near = true;
+        }
+      }
+      if (near) candidates.push([r, c]);
     }
-    if (near) cs.push([r, c]);
   }
-  return cs;
+  return candidates;
 }
 
-function ms(b: Board, r: number, c: number, ai: Stone): number {
-  const hu = ai === WHITE ? BLACK : WHITE;
-  b[r][c] = ai; const a = ep(b, r, c, ai);
-  b[r][c] = hu; const d = ep(b, r, c, hu);
-  b[r][c] = EMPTY; return a + d;
+/** Move score: sum of attack + defense value at (r,c). */
+function moveScore(b: Board, r: number, c: number, ai: Stone): number {
+  const human = ai === WHITE ? BLACK : WHITE;
+  b[r][c] = ai;
+  const attack = evalPosition(b, r, c, ai);
+  b[r][c] = human;
+  const defense = evalPosition(b, r, c, human);
+  b[r][c] = EMPTY;
+  return attack + defense;
 }
 
-function bHash(b: Board): number {
+/** Zobrist-like hash for transposition table. */
+function boardHash(b: Board): number {
   let h = 0;
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (b[r][c]) h = ((h * 3 + b[r][c]) * 31 + r * 15 + c) | 0;
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (b[r][c]) h = ((h * 3 + b[r][c]) * 31 + r * 15 + c) | 0;
+    }
+  }
   return h;
 }
 
+/** Find threat moves (positions that create or block a four/five). */
 function getThreats(b: Board, p: Stone): Pos[] {
-  const ts: Pos[] = [], op = p === WHITE ? BLACK : WHITE;
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
-    if (b[r][c] !== EMPTY) continue;
-    b[r][c] = p; let hit = false;
-    for (const [dr, dc] of DIR) { const info = lineInfo(b, r, c, dr, dc, p); if (info.s >= 5 || (info.s === 4 && info.oe >= 1)) { hit = true; break; } }
-    b[r][c] = EMPTY;
-    if (hit) { ts.push([r, c]); continue; }
-    b[r][c] = op;
-    for (const [dr, dc] of DIR) { const info = lineInfo(b, r, c, dr, dc, op); if (info.s >= 5 || (info.s === 4 && info.oe >= 1)) { ts.push([r, c]); break; } }
-    b[r][c] = EMPTY;
+  const threats: Pos[] = [];
+  const opponent = p === WHITE ? BLACK : WHITE;
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (b[r][c] !== EMPTY) continue;
+
+      // check if placing `p` here creates a threat
+      b[r][c] = p;
+      let isAttackThreat = false;
+      for (const [dr, dc] of DIR) {
+        const info = lineInfo(b, r, c, dr, dc, p);
+        if (info.s >= 5 || (info.s === 4 && info.oe >= 1)) {
+          isAttackThreat = true;
+          break;
+        }
+      }
+      b[r][c] = EMPTY;
+
+      if (isAttackThreat) {
+        threats.push([r, c]);
+        continue;
+      }
+
+      // check if opponent placing here would be a threat (defensive)
+      b[r][c] = opponent;
+      for (const [dr, dc] of DIR) {
+        const info = lineInfo(b, r, c, dr, dc, opponent);
+        if (info.s >= 5 || (info.s === 4 && info.oe >= 1)) {
+          threats.push([r, c]);
+          break;
+        }
+      }
+      b[r][c] = EMPTY;
+    }
   }
-  return ts;
+  return threats;
 }
 
-function quiesce(b: Board, a: number, bt: number, mx: boolean, dl: number, nc: { count: number }, ai: Stone): number {
-  nc.count++;
+/** Quiescence search: extend search on threat moves to avoid horizon effect. */
+function quiesce(
+  b: Board, alpha: number, beta: number,
+  isMaximizing: boolean, depthLeft: number,
+  nodeCount: { count: number }, ai: Stone,
+): number {
+  nodeCount.count++;
+
   if (chkWin(b, ai)) return SC.FIVE * 10;
-  const hu = ai === WHITE ? BLACK : WHITE;
-  if (chkWin(b, hu)) return -SC.FIVE * 10;
-  const sp = evalBoard(b, ai);
-  if (dl <= 0) return sp;
-  if (mx) { if (sp >= bt) return sp; a = Math.max(a, sp); }
-  else { if (sp <= a) return sp; bt = Math.min(bt, sp); }
-  const p = mx ? ai : hu;
-  const ts = getThreats(b, p);
-  if (!ts.length) return sp;
-  const sd = ts.map(([r, c]) => ({ r, c, s: ms(b, r, c, ai) })).sort((x, y) => y.s - x.s).slice(0, 8);
-  if (mx) {
-    let best = sp;
-    for (const { r, c } of sd) { if (p === BLACK && forbidden(b, r, c)) continue; b[r][c] = p; const v = quiesce(b, a, bt, false, dl - 1, nc, ai); b[r][c] = EMPTY; best = Math.max(best, v); a = Math.max(a, v); if (a >= bt) break; }
+  const human = ai === WHITE ? BLACK : WHITE;
+  if (chkWin(b, human)) return -SC.FIVE * 10;
+
+  const standPat = evalBoard(b, ai);
+  if (depthLeft <= 0) return standPat;
+
+  if (isMaximizing) {
+    if (standPat >= beta) return standPat;
+    alpha = Math.max(alpha, standPat);
+  } else {
+    if (standPat <= alpha) return standPat;
+    beta = Math.min(beta, standPat);
+  }
+
+  const player = isMaximizing ? ai : human;
+  const threats = getThreats(b, player);
+  if (!threats.length) return standPat;
+
+  const sorted = threats
+    .map(([r, c]) => ({ r, c, s: moveScore(b, r, c, ai) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 8);
+
+  if (isMaximizing) {
+    let best = standPat;
+    for (const { r, c } of sorted) {
+      if (player === BLACK && forbidden(b, r, c)) continue;
+      b[r][c] = player;
+      const val = quiesce(b, alpha, beta, false, depthLeft - 1, nodeCount, ai);
+      b[r][c] = EMPTY;
+      best = Math.max(best, val);
+      alpha = Math.max(alpha, val);
+      if (alpha >= beta) break;
+    }
     return best;
   } else {
-    let best = sp;
-    for (const { r, c } of sd) { if (p === BLACK && forbidden(b, r, c)) continue; b[r][c] = p; const v = quiesce(b, a, bt, true, dl - 1, nc, ai); b[r][c] = EMPTY; best = Math.min(best, v); bt = Math.min(bt, v); if (a >= bt) break; }
+    let best = standPat;
+    for (const { r, c } of sorted) {
+      if (player === BLACK && forbidden(b, r, c)) continue;
+      b[r][c] = player;
+      const val = quiesce(b, alpha, beta, true, depthLeft - 1, nodeCount, ai);
+      b[r][c] = EMPTY;
+      best = Math.min(best, val);
+      beta = Math.min(beta, val);
+      if (alpha >= beta) break;
+    }
     return best;
   }
 }
 
-function mmx(b: Board, d: number, a: number, bt: number, mx: boolean, nc: { count: number }, cfg: DiffConfig, tt: Map<number, TTEntry>, kl: Record<number, Pos[]>, t0: number, ai: Stone): number {
-  if (performance.now() - t0 > cfg.time) return evalBoard(b, ai);
-  nc.count++;
-  const hu = ai === WHITE ? BLACK : WHITE;
+/** Minimax with alpha-beta pruning, killer heuristic, and transposition table. */
+function minimax(
+  b: Board, depth: number, alpha: number, beta: number,
+  isMaximizing: boolean, nodeCount: { count: number },
+  cfg: DiffConfig, tt: Map<number, TTEntry>,
+  killers: Record<number, Pos[]>, startTime: number, ai: Stone,
+): number {
+  if (performance.now() - startTime > cfg.time) return evalBoard(b, ai);
+  nodeCount.count++;
+
+  const human = ai === WHITE ? BLACK : WHITE;
   if (chkWin(b, ai)) return SC.FIVE * 10;
-  if (chkWin(b, hu)) return -SC.FIVE * 10;
-  if (d <= 0) return cfg.thr > 0 ? quiesce(b, a, bt, mx, cfg.thr, nc, ai) : evalBoard(b, ai);
-  const h = bHash(b);
-  const te = tt.get(h);
-  if (te && te.d >= d) { if (te.f === 0) return te.s; if (te.f === 1 && te.s >= bt) return te.s; if (te.f === 2 && te.s <= a) return te.s; }
-  let cs = getCands(b);
-  if (!cs.length) return 0;
-  const ks = new Set((kl[d] || []).map(k => `${k[0]},${k[1]}`));
-  cs.sort((x, y) => { const xk = ks.has(`${x[0]},${x[1]}`) ? 1e8 : 0; const yk = ks.has(`${y[0]},${y[1]}`) ? 1e8 : 0; return (yk + ms(b, y[0], y[1], ai)) - (xk + ms(b, x[0], x[1], ai)); });
-  cs = cs.slice(0, cfg.maxC);
-  const oa = a;
-  if (mx) {
+  if (chkWin(b, human)) return -SC.FIVE * 10;
+
+  if (depth <= 0) {
+    return cfg.thr > 0
+      ? quiesce(b, alpha, beta, isMaximizing, cfg.thr, nodeCount, ai)
+      : evalBoard(b, ai);
+  }
+
+  // transposition table lookup
+  const hash = boardHash(b);
+  const entry = tt.get(hash);
+  if (entry && entry.d >= depth) {
+    if (entry.f === 0) return entry.s;                    // exact
+    if (entry.f === 1 && entry.s >= beta) return entry.s; // lower bound
+    if (entry.f === 2 && entry.s <= alpha) return entry.s; // upper bound
+  }
+
+  // generate and sort candidates
+  let candidates = getCands(b);
+  if (!candidates.length) return 0;
+
+  const killerSet = new Set(
+    (killers[depth] || []).map(k => `${k[0]},${k[1]}`),
+  );
+  candidates.sort((x, y) => {
+    const xBonus = killerSet.has(`${x[0]},${x[1]}`) ? 1e8 : 0;
+    const yBonus = killerSet.has(`${y[0]},${y[1]}`) ? 1e8 : 0;
+    return (yBonus + moveScore(b, y[0], y[1], ai))
+         - (xBonus + moveScore(b, x[0], x[1], ai));
+  });
+  candidates = candidates.slice(0, cfg.maxC);
+
+  const origAlpha = alpha;
+
+  if (isMaximizing) {
     let best = -Infinity;
-    for (const [r, c] of cs) {
+    for (const [r, c] of candidates) {
       if (ai === BLACK && forbidden(b, r, c)) continue;
-      b[r][c] = ai; let ext = 0;
-      for (const [dr, dc] of DIR) { const info = lineInfo(b, r, c, dr, dc, ai); if (info.s === 4 && info.oe >= 1) { ext = 1; break; } }
-      const ev = mmx(b, d - 1 + ext, a, bt, false, nc, cfg, tt, kl, t0, ai); b[r][c] = EMPTY;
-      best = Math.max(best, ev); a = Math.max(a, ev);
-      if (bt <= a) { if (!kl[d]) kl[d] = []; kl[d].unshift([r, c]); if (kl[d].length > 2) kl[d].pop(); break; }
+
+      b[r][c] = ai;
+      // check for extension (threat creates urgency)
+      let extension = 0;
+      for (const [dr, dc] of DIR) {
+        const info = lineInfo(b, r, c, dr, dc, ai);
+        if (info.s === 4 && info.oe >= 1) { extension = 1; break; }
+      }
+
+      const val = minimax(
+        b, depth - 1 + extension, alpha, beta,
+        false, nodeCount, cfg, tt, killers, startTime, ai,
+      );
+      b[r][c] = EMPTY;
+
+      best = Math.max(best, val);
+      alpha = Math.max(alpha, val);
+      if (beta <= alpha) {
+        // killer move heuristic
+        if (!killers[depth]) killers[depth] = [];
+        killers[depth].unshift([r, c]);
+        if (killers[depth].length > 2) killers[depth].pop();
+        break;
+      }
     }
-    tt.set(h, { s: best, d, f: best <= oa ? 2 : best >= bt ? 1 : 0 }); return best;
+    const flag = best <= origAlpha ? 2 : best >= beta ? 1 : 0;
+    tt.set(hash, { s: best, d: depth, f: flag });
+    return best;
   } else {
     let best = Infinity;
-    for (const [r, c] of cs) {
-      if (hu === BLACK && forbidden(b, r, c)) continue;
-      b[r][c] = hu; let ext = 0;
-      for (const [dr, dc] of DIR) { const info = lineInfo(b, r, c, dr, dc, hu); if (info.s === 4 && info.oe >= 1) { ext = 1; break; } }
-      const ev = mmx(b, d - 1 + ext, a, bt, true, nc, cfg, tt, kl, t0, ai); b[r][c] = EMPTY;
-      best = Math.min(best, ev); bt = Math.min(bt, ev);
-      if (bt <= a) { if (!kl[d]) kl[d] = []; kl[d].unshift([r, c]); if (kl[d].length > 2) kl[d].pop(); break; }
+    for (const [r, c] of candidates) {
+      if (human === BLACK && forbidden(b, r, c)) continue;
+
+      b[r][c] = human;
+      let extension = 0;
+      for (const [dr, dc] of DIR) {
+        const info = lineInfo(b, r, c, dr, dc, human);
+        if (info.s === 4 && info.oe >= 1) { extension = 1; break; }
+      }
+
+      const val = minimax(
+        b, depth - 1 + extension, alpha, beta,
+        true, nodeCount, cfg, tt, killers, startTime, ai,
+      );
+      b[r][c] = EMPTY;
+
+      best = Math.min(best, val);
+      beta = Math.min(beta, val);
+      if (beta <= alpha) {
+        if (!killers[depth]) killers[depth] = [];
+        killers[depth].unshift([r, c]);
+        if (killers[depth].length > 2) killers[depth].pop();
+        break;
+      }
     }
-    tt.set(h, { s: best, d, f: best <= oa ? 2 : best >= bt ? 1 : 0 }); return best;
+    const flag = best <= origAlpha ? 2 : best >= beta ? 1 : 0;
+    tt.set(hash, { s: best, d: depth, f: flag });
+    return best;
   }
 }
 
+/** Find the best move for the AI using iterative deepening. */
 export function findBest(b: Board, diff: DiffKey, ai: Stone): FindBestResult {
-  const cfg = DIFF[diff]; const hu = ai === WHITE ? BLACK : WHITE;
-  const cs = getCands(b); const t0 = performance.now();
-  for (const [r, c] of cs) { if (ai === BLACK && forbidden(b, r, c)) continue; b[r][c] = ai; if (chkWin(b, ai)) { b[r][c] = EMPTY; return { move: [r, c], nodes: 1, depth: 1 }; } b[r][c] = EMPTY; }
-  for (const [r, c] of cs) { if (hu === BLACK && forbidden(b, r, c)) continue; b[r][c] = hu; if (chkWin(b, hu)) { b[r][c] = EMPTY; return { move: [r, c], nodes: 1, depth: 1 }; } b[r][c] = EMPTY; }
+  const cfg = DIFF[diff];
+  const human = ai === WHITE ? BLACK : WHITE;
+  const candidates = getCands(b);
+  const startTime = performance.now();
+
+  // immediate win check
+  for (const [r, c] of candidates) {
+    if (ai === BLACK && forbidden(b, r, c)) continue;
+    b[r][c] = ai;
+    if (chkWin(b, ai)) { b[r][c] = EMPTY; return { move: [r, c], nodes: 1, depth: 1 }; }
+    b[r][c] = EMPTY;
+  }
+
+  // immediate block check
+  for (const [r, c] of candidates) {
+    if (human === BLACK && forbidden(b, r, c)) continue;
+    b[r][c] = human;
+    if (chkWin(b, human)) { b[r][c] = EMPTY; return { move: [r, c], nodes: 1, depth: 1 }; }
+    b[r][c] = EMPTY;
+  }
+
+  // sort candidates by heuristic score
+  const sorted = [...candidates].sort(
+    (x, y) => moveScore(b, y[0], y[1], ai) - moveScore(b, x[0], x[1], ai),
+  );
+
+  // easy difficulty: shallow search with some randomness
   if (diff === "easy") {
-    const sd = [...cs].sort((x, y) => ms(b, y[0], y[1], ai) - ms(b, x[0], x[1], ai));
-    const top = sd.slice(0, 3);
+    const top = sorted.slice(0, 3);
     const pick = top[Math.floor(Math.random() * Math.min(2, top.length))];
-    const tt = new Map<number, TTEntry>(), kl: Record<number, Pos[]> = {}, nc = { count: 0 };
-    let bs = -Infinity, bm: Pos = pick;
-    for (const [r, c] of sd.slice(0, cfg.maxC)) {
+    const tt = new Map<number, TTEntry>();
+    const killers: Record<number, Pos[]> = {};
+    const nodeCount = { count: 0 };
+
+    let bestScore = -Infinity;
+    let bestMove: Pos = pick;
+    for (const [r, c] of sorted.slice(0, cfg.maxC)) {
       if (ai === BLACK && forbidden(b, r, c)) continue;
-      b[r][c] = ai; const s = mmx(b, 1, -Infinity, Infinity, false, nc, cfg, tt, kl, t0, ai); b[r][c] = EMPTY;
-      if (s > bs) { bs = s; bm = [r, c]; }
+      b[r][c] = ai;
+      const score = minimax(b, 1, -Infinity, Infinity, false, nodeCount, cfg, tt, killers, startTime, ai);
+      b[r][c] = EMPTY;
+      if (score > bestScore) { bestScore = score; bestMove = [r, c]; }
     }
-    return { move: bm, nodes: nc.count, depth: 2 };
+    return { move: bestMove, nodes: nodeCount.count, depth: 2 };
   }
-  const tt = new Map<number, TTEntry>(), kl: Record<number, Pos[]> = {}, nc = { count: 0 };
-  let bm: Pos = cs[0], bs = -Infinity, rd = 1;
-  const sd = [...cs].sort((x, y) => ms(b, y[0], y[1], ai) - ms(b, x[0], x[1], ai));
+
+  // iterative deepening for harder difficulties
+  const tt = new Map<number, TTEntry>();
+  const killers: Record<number, Pos[]> = {};
+  const nodeCount = { count: 0 };
+  let bestMove: Pos = candidates[0];
+  let bestScore = -Infinity;
+  let reachedDepth = 1;
+
   for (let d = 2; d <= cfg.maxD; d += 2) {
-    let dbs = -Infinity, dbm: Pos = bm, ok = true;
-    for (const [r, c] of sd.slice(0, cfg.maxC)) {
-      if (performance.now() - t0 > cfg.time * 0.8) { ok = false; break; }
+    let depthBest = -Infinity;
+    let depthMove: Pos = bestMove;
+    let completed = true;
+
+    for (const [r, c] of sorted.slice(0, cfg.maxC)) {
+      if (performance.now() - startTime > cfg.time * 0.8) { completed = false; break; }
       if (ai === BLACK && forbidden(b, r, c)) continue;
-      b[r][c] = ai; const s = mmx(b, d - 1, -Infinity, Infinity, false, nc, cfg, tt, kl, t0, ai); b[r][c] = EMPTY;
-      if (s > dbs) { dbs = s; dbm = [r, c]; }
-      if (s >= SC.FIVE) return { move: dbm, nodes: nc.count, depth: d };
+
+      b[r][c] = ai;
+      const score = minimax(b, d - 1, -Infinity, Infinity, false, nodeCount, cfg, tt, killers, startTime, ai);
+      b[r][c] = EMPTY;
+
+      if (score > depthBest) { depthBest = score; depthMove = [r, c]; }
+      if (score >= SC.FIVE) return { move: depthMove, nodes: nodeCount.count, depth: d };
     }
-    if (ok || dbs > bs) { bs = dbs; bm = dbm; rd = d; }
-    const bi = sd.findIndex(([r, c]) => r === bm[0] && c === bm[1]);
-    if (bi > 0) { const [x] = sd.splice(bi, 1); sd.unshift(x); }
-    if (performance.now() - t0 > cfg.time * 0.6) break;
+
+    if (completed || depthBest > bestScore) {
+      bestScore = depthBest;
+      bestMove = depthMove;
+      reachedDepth = d;
+    }
+
+    // promote best move to front of sorted list for next iteration
+    const idx = sorted.findIndex(([r, c]) => r === bestMove[0] && c === bestMove[1]);
+    if (idx > 0) {
+      const [top] = sorted.splice(idx, 1);
+      sorted.unshift(top);
+    }
+
+    if (performance.now() - startTime > cfg.time * 0.6) break;
   }
-  return { move: bm, nodes: nc.count, depth: rd };
+
+  return { move: bestMove, nodes: nodeCount.count, depth: reachedDepth };
 }
