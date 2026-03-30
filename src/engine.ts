@@ -73,9 +73,21 @@ function openThreeDir(b: Board, r: number, c: number, dr: number, dc: number): b
         if (p.v !== EMPTY) continue;
         b[p.r][p.c] = BLACK;
         const info = lineInfo(b, p.r, p.c, dr, dc, BLACK);
-        const ok = info.s === 4 && info.oe === 2;
-        b[p.r][p.c] = EMPTY;
-        if (ok) return true;
+        if (info.s === 4 && info.oe === 2) {
+          // Find both open ends of this four
+          let fr = p.r + dr, fc = p.c + dc;
+          while (ib(fr, fc) && b[fr][fc] === BLACK) { fr += dr; fc += dc; }
+          let br = p.r - dr, bc = p.c - dc;
+          while (ib(br, bc) && b[br][bc] === BLACK) { br -= dr; bc -= dc; }
+          // fr,fc and br,bc are the first empty cells at each end
+          // Check if a BLACK stone sits just beyond either open end (jumped four)
+          const fj = fr + dr, fk = fc + dc, bj = br - dr, bk = bc - dc;
+          const jumped = (ib(fj, fk) && b[fj][fk] === BLACK) || (ib(bj, bk) && b[bj][bk] === BLACK);
+          b[p.r][p.c] = EMPTY;
+          if (!jumped) return true;
+        } else {
+          b[p.r][p.c] = EMPTY;
+        }
       }
     }
   }

@@ -135,6 +135,113 @@ describe("Renju forbidden moves", () => {
     expect(forbidden(b, 7, 7)).toBeNull();
   });
 
+  it("jumped four + three is NOT forbidden (4-3)", () => {
+    // Diagonal: B _ B B X — placing X creates a jumped four (뛴사), not a three
+    // Vertical: B B X — placing X creates an open three
+    // 4-3 is allowed, not 3-3
+    const b = createBoard();
+    place(b, [
+      [4, 4, BLACK], [6, 6, BLACK], [7, 7, BLACK], // diagonal jumped four
+      [6, 8, BLACK], [7, 8, BLACK],                 // vertical open three
+    ]);
+    expect(forbidden(b, 8, 8)).toBeNull();
+  });
+
+  it("dead three (blocked by WHITE) + open three is NOT 33", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 4, WHITE], [7, 5, BLACK], [7, 6, BLACK], // W B B X → blocked three
+      [5, 7, BLACK], [6, 7, BLACK],                  // open three (vertical)
+    ]);
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
+  it("dead three (blocked by wall) + open three is NOT 33", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 1, BLACK], [7, 2, BLACK], // [wall] B B X → blocked by edge
+      [5, 0, BLACK], [6, 0, BLACK], // open three (vertical)
+    ]);
+    expect(forbidden(b, 7, 0)).toBeNull();
+  });
+
+  it("three blocked on far side + open three is NOT 33", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 6, BLACK], [7, 8, BLACK], [7, 9, WHITE], // _ B X B W → blocked right
+      [5, 7, BLACK], [6, 7, BLACK],                  // open three (vertical)
+    ]);
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
+  it("jumped three (뛴삼) + open three = 33", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 4, BLACK], [7, 6, BLACK], // B . X → jumped three (horizontal)
+      [5, 7, BLACK], [6, 7, BLACK], // open three (vertical)
+    ]);
+    expect(forbidden(b, 7, 7)).toBe("33");
+  });
+
+  it("double jumped three = 33", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 4, BLACK], [7, 6, BLACK], // B . X B → jumped three (horizontal)
+      [4, 7, BLACK], [6, 7, BLACK], // B . X B → jumped three (vertical)
+    ]);
+    expect(forbidden(b, 7, 7)).toBe("33");
+  });
+
+  it("consecutive four + open three = 4-3 NOT forbidden", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 4, BLACK], [7, 5, BLACK], [7, 6, BLACK], // B B B X → four
+      [5, 7, BLACK], [6, 7, BLACK],                  // open three
+    ]);
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
+  it("exact 5 overrides 33", () => {
+    const b = createBoard();
+    for (let c = 3; c < 7; c++) b[7][c] = BLACK;   // 4 in a row → placing makes 5
+    place(b, [[5, 7, BLACK], [6, 7, BLACK]]);         // would be open three
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
+  it("exact 5 in one dir + overline in another = NOT forbidden", () => {
+    const b = createBoard();
+    for (let c = 3; c < 7; c++) b[7][c] = BLACK;   // horizontal 4 → exact 5
+    for (let r = 2; r < 7; r++) b[r][7] = BLACK;   // vertical 5 → overline (6)
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
+  it("7 in a row = overline", () => {
+    const b = createBoard();
+    for (let c = 1; c < 8; c++) { if (c !== 4) b[7][c] = BLACK; }
+    expect(forbidden(b, 7, 4)).toBe("overline");
+  });
+
+  it("edge four + regular four = 44", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 0, BLACK], [7, 1, BLACK], [7, 2, BLACK], // [wall] B B B X → four (oe=1)
+      [5, 3, BLACK], [6, 3, BLACK], [8, 3, BLACK],  // B B X B → four
+    ]);
+    expect(forbidden(b, 7, 3)).toBe("44");
+  });
+
+  it("single open three is NOT forbidden", () => {
+    const b = createBoard();
+    place(b, [[7, 6, BLACK], [7, 8, BLACK]]);
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
+  it("single four is NOT forbidden", () => {
+    const b = createBoard();
+    place(b, [[7, 4, BLACK], [7, 5, BLACK], [7, 6, BLACK]]);
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
   it("empty board has no forbidden positions", () => {
     const b = createBoard();
     const f = allForbidden(b);
