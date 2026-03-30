@@ -173,12 +173,14 @@ export default function Gomoku() {
         <span>AI: {aiColor === BLACK ? "● 흑" : "○ 백"} {cfg.emoji}{cfg.label}</span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 20px", borderRadius: "40px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "13px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 20px", borderRadius: "40px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "13px", minHeight: "20px" }}>
         {thinking && <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⚙️</span>}
         <span style={{ fontWeight: 700, color: stColor }}>{stText}</span>
       </div>
 
-      {alertMsg && <div style={{ padding: "8px 20px", borderRadius: "8px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", fontSize: "13px", fontWeight: 600, animation: "shakeX 0.4s ease" }}>{alertMsg}</div>}
+      <div style={{ height: "36px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {alertMsg && <div style={{ padding: "8px 20px", borderRadius: "8px", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", fontSize: "13px", fontWeight: 600, animation: "shakeX 0.4s ease" }}>{alertMsg}</div>}
+      </div>
 
       <svg viewBox={`0 0 ${bpx} ${bpx}`} style={{ width: "100%", maxWidth: `${bpx}px`, aspectRatio: "1", borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.5)", cursor: gameOver || thinking || !isMyTurn ? "default" : "pointer" }}>
         <defs>
@@ -215,19 +217,23 @@ export default function Gomoku() {
         {playerColor === BLACK && <button onClick={() => setShowForbid(v => !v)} style={{ ...btn, border: `1px solid ${showForbid ? "rgba(245,158,11,0.4)" : "rgba(255,255,255,0.15)"}`, background: showForbid ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.08)", color: showForbid ? "#fbbf24" : "#6b7280" }}>{showForbid ? "🚫 금수 ON" : "🚫 금수 OFF"}</button>}
       </div>
 
-      {showForbid && playerColor === BLACK && !gameOver && fMap.size > 0 && (
-        <div style={{ display: "flex", gap: "14px", fontSize: "11px", padding: "5px 14px", borderRadius: "16px", background: "rgba(255,255,255,0.03)" }}>
-          {(["33", "44", "overline"] as ForbiddenReason[]).map(k => { const l = FL[k]; const n = Array.from(fMap.values()).filter(v => v === k).length; return n ? <span key={k} style={{ color: FC[k] }}>✕ {l}: <b>{n}</b></span> : null; })}
-        </div>
-      )}
+      <div style={{ minHeight: "22px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {showForbid && playerColor === BLACK && !gameOver && fMap.size > 0 && (
+          <div style={{ display: "flex", gap: "14px", fontSize: "11px", padding: "5px 14px", borderRadius: "16px", background: "rgba(255,255,255,0.03)" }}>
+            {(["33", "44", "overline"] as ForbiddenReason[]).map(k => { const l = FL[k]; const n = Array.from(fMap.values()).filter(v => v === k).length; return n ? <span key={k} style={{ color: FC[k] }}>✕ {l}: <b>{n}</b></span> : null; })}
+          </div>
+        )}
+      </div>
 
-      {stats.nodes > 0 && (
-        <div style={{ display: "flex", gap: "14px", fontSize: "11px", color: "#6b7280", padding: "5px 14px", borderRadius: "16px", background: "rgba(255,255,255,0.03)", flexWrap: "wrap", justifyContent: "center" }}>
-          <span>깊이: <b style={{ color: "#a78bfa" }}>{stats.depth}</b></span>
-          <span>노드: <b style={{ color: "#a78bfa" }}>{stats.nodes.toLocaleString()}</b></span>
-          <span>시간: <b style={{ color: "#a78bfa" }}>{stats.time}ms</b></span>
-        </div>
-      )}
+      <div style={{ minHeight: "22px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {stats.nodes > 0 && (
+          <div style={{ display: "flex", gap: "14px", fontSize: "11px", color: "#6b7280", padding: "5px 14px", borderRadius: "16px", background: "rgba(255,255,255,0.03)", flexWrap: "wrap", justifyContent: "center" }}>
+            <span>깊이: <b style={{ color: "#a78bfa" }}>{stats.depth}</b></span>
+            <span>노드: <b style={{ color: "#a78bfa" }}>{stats.nodes.toLocaleString()}</b></span>
+            <span>시간: <b style={{ color: "#a78bfa" }}>{stats.time}ms</b></span>
+          </div>
+        )}
+      </div>
 
       <div style={{ fontSize: "10px", color: "#4b5563", textAlign: "center" }}>렌주 룰 (흑돌 금수) | 반복 심화 + 위협 탐색 + TT + Killer</div>
       <style>{`.gold-text{font-weight:900;margin:0;background:linear-gradient(135deg,#e2c391,#f5deb3,#d4a853);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;}@keyframes spin{to{transform:rotate(360deg);}}@keyframes shakeX{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(2px)}}button:hover:not(:disabled){background:rgba(255,255,255,0.14)!important;transform:translateY(-1px);}`}</style>
