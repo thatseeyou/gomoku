@@ -173,8 +173,8 @@ export default function Gomoku() {
         <span>AI: {aiColor === BLACK ? "● 흑" : "○ 백"} {cfg.emoji}{cfg.label}</span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 20px", borderRadius: "40px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "13px", height: "36px", boxSizing: "border-box" }}>
-        <span style={{ animation: thinking ? "spin 1s linear infinite" : "none", display: "inline-block", visibility: thinking ? "visible" : "hidden" }}>⚙️</span>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px 20px", borderRadius: "40px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "13px", height: "36px", boxSizing: "border-box" }}>
+        {thinking && <span style={{ position: "absolute", left: "12px", animation: "spin 1s linear infinite", display: "inline-block" }}>⚙️</span>}
         <span style={{ fontWeight: 700, color: stColor }}>{stText}</span>
       </div>
 
