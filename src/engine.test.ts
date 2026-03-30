@@ -119,6 +119,56 @@ describe("Renju forbidden moves", () => {
     expect(re).toBe("44");
   });
 
+  it("detects jumped four + consecutive four as 44 (뛴사+연속사)", () => {
+    // Horizontal: B B [X] . B → jumped four
+    // Vertical: B B B [X] → consecutive four
+    const b = createBoard();
+    place(b, [
+      [7, 4, BLACK], [7, 5, BLACK], [7, 8, BLACK],  // horizontal jumped four
+      [4, 6, BLACK], [5, 6, BLACK], [6, 6, BLACK],   // vertical consecutive four
+    ]);
+    expect(forbidden(b, 7, 6)).toBe("44");
+  });
+
+  it("detects double jumped four as 44 (뛴사+뛴사)", () => {
+    // Horizontal: B B [X] . B → jumped four
+    // Vertical: B B [X] . B → jumped four
+    const b = createBoard();
+    place(b, [
+      [7, 4, BLACK], [7, 5, BLACK], [7, 8, BLACK],  // horizontal jumped four
+      [5, 6, BLACK], [6, 6, BLACK], [9, 6, BLACK],   // vertical jumped four
+    ]);
+    expect(forbidden(b, 7, 6)).toBe("44");
+  });
+
+  it("detects B.B[X]B pattern as jumped four for 44", () => {
+    // Horizontal: B . B [X] B → jumped four (gap on left)
+    // Vertical: B B B [X] → consecutive four
+    const b = createBoard();
+    place(b, [
+      [7, 3, BLACK], [7, 5, BLACK], [7, 8, BLACK],  // B . B [X] . . B — wait
+    ]);
+    // Actually: B at col3, B at col5, X at col6, B at col8 → B . B [X] . B — not 5-window
+    // Let me fix: B . B [X] B → (7,3)B, (7,5)B, X=(7,6), (7,7)B
+    const b2 = createBoard();
+    place(b2, [
+      [7, 3, BLACK], [7, 5, BLACK], [7, 7, BLACK],   // B . B [X] B
+      [4, 6, BLACK], [5, 6, BLACK], [6, 6, BLACK],    // vertical consecutive four
+    ]);
+    expect(forbidden(b2, 7, 6)).toBe("44");
+  });
+
+  it("detects B[X].BB pattern as jumped four for 44", () => {
+    // Horizontal: B [X] . B B → jumped four (gap on right)
+    // Vertical: B B B [X] → consecutive four
+    const b = createBoard();
+    place(b, [
+      [7, 5, BLACK], [7, 8, BLACK], [7, 9, BLACK],   // B [X] . B B
+      [4, 6, BLACK], [5, 6, BLACK], [6, 6, BLACK],    // vertical consecutive four
+    ]);
+    expect(forbidden(b, 7, 6)).toBe("44");
+  });
+
   it("detects overline", () => {
     const b = createBoard();
     // 5 blacks in a row with a gap that would make 6
@@ -239,6 +289,45 @@ describe("Renju forbidden moves", () => {
   it("single four is NOT forbidden", () => {
     const b = createBoard();
     place(b, [[7, 4, BLACK], [7, 5, BLACK], [7, 6, BLACK]]);
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
+  it("recursive: both extension points are 44 → three is not open → 33 lifted", () => {
+    // X=(7,7), horizontal three: (7,5)(7,6)[X] → extension points (7,4) and (7,8)
+    // vertical three: (5,7)(6,7)[X] → normal open three
+    // Make (7,4) and (7,8) both 44 forbidden (after placing X):
+    //   (7,8): horizontal four + vertical four via (4,8)(5,8)(6,8)
+    //   (7,4): horizontal four + vertical four via (4,4)(5,4)(6,4)
+    // → horizontal three is not a real open three → only 1 open three → not 33
+    const b = createBoard();
+    place(b, [
+      [7, 5, BLACK], [7, 6, BLACK],                   // horizontal three
+      [5, 7, BLACK], [6, 7, BLACK],                    // vertical three
+      [4, 8, BLACK], [5, 8, BLACK], [6, 8, BLACK],    // make (7,8) → 44
+      [4, 4, BLACK], [5, 4, BLACK], [6, 4, BLACK],    // make (7,4) → 44
+    ]);
+    expect(forbidden(b, 7, 7)).toBeNull();
+  });
+
+  it("recursive: one extension point is 44 but other is not → still open three → 33", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 5, BLACK], [7, 6, BLACK],                   // horizontal three
+      [5, 7, BLACK], [6, 7, BLACK],                    // vertical three
+      [4, 8, BLACK], [5, 8, BLACK], [6, 8, BLACK],    // make (7,8) → 44
+      // (7,4) is NOT forbidden → horizontal three can still extend
+    ]);
+    expect(forbidden(b, 7, 7)).toBe("33");
+  });
+
+  it("recursive: both extension points are overline → three is not open → 33 lifted", () => {
+    const b = createBoard();
+    place(b, [
+      [7, 6, BLACK], [7, 8, BLACK],                   // horizontal three with gap
+      [5, 7, BLACK], [6, 7, BLACK],                    // vertical three
+      [7, 2, BLACK], [7, 3, BLACK], [7, 4, BLACK],    // make (7,5) → overline
+      [7, 10, BLACK], [7, 11, BLACK], [7, 12, BLACK], // make (7,9) → overline
+    ]);
     expect(forbidden(b, 7, 7)).toBeNull();
   });
 

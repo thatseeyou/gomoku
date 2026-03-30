@@ -58,7 +58,7 @@ export function overline(b: Board, r: number, c: number): boolean {
   return false;
 }
 
-function openThreeDir(b: Board, r: number, c: number, dr: number, dc: number): boolean {
+function openThreeDir(b: Board, r: number, c: number, dr: number, dc: number, depth: number = 0): boolean {
   const ln: { r: number; c: number; v: Stone }[] = [];
   let sr = r, sc = c;
   for (let i = 0; i < 6; i++) { const p = sr - dr, q = sc - dc; if (!ib(p, q)) break; sr = p; sc = q; }
@@ -79,12 +79,14 @@ function openThreeDir(b: Board, r: number, c: number, dr: number, dc: number): b
           while (ib(fr, fc) && b[fr][fc] === BLACK) { fr += dr; fc += dc; }
           let br = p.r - dr, bc = p.c - dc;
           while (ib(br, bc) && b[br][bc] === BLACK) { br -= dr; bc -= dc; }
-          // fr,fc and br,bc are the first empty cells at each end
-          // Check if a BLACK stone sits just beyond either open end (jumped four)
           const fj = fr + dr, fk = fc + dc, bj = br - dr, bk = bc - dc;
           const jumped = (ib(fj, fk) && b[fj][fk] === BLACK) || (ib(bj, bk) && b[bj][bk] === BLACK);
           b[p.r][p.c] = EMPTY;
-          if (!jumped) return true;
+          // Jumped four pattern — this is a four, not a three
+          if (jumped) continue;
+          // Recursive check: the move that extends three→four must not itself be forbidden
+          if (depth < 2 && isForbidden(b, p.r, p.c, depth + 1)) continue;
+          return true;
         } else {
           b[p.r][p.c] = EMPTY;
         }
@@ -94,16 +96,52 @@ function openThreeDir(b: Board, r: number, c: number, dr: number, dc: number): b
   return false;
 }
 
-function cntOT(b: Board, r: number, c: number): number {
+function cntOT(b: Board, r: number, c: number, depth: number = 0): number {
   let n = 0; b[r][c] = BLACK;
-  for (const [dr, dc] of DIR) if (openThreeDir(b, r, c, dr, dc)) n++;
+  for (const [dr, dc] of DIR) if (openThreeDir(b, r, c, dr, dc, depth)) n++;
   b[r][c] = EMPTY; return n;
+}
+
+function fourDir(b: Board, r: number, c: number, dr: number, dc: number): boolean {
+  // Consecutive four: s=4 with at least one open end
+  const info = lineInfo(b, r, c, dr, dc, BLACK);
+  if (info.s === 4 && info.oe >= 1) return true;
+  // Jumped four: 5-cell window with 4B+1E where filling the empty makes 5
+  const ln: { r: number; c: number; v: Stone }[] = [];
+  let sr = r, sc = c;
+  for (let i = 0; i < 4; i++) { const p = sr - dr, q = sc - dc; if (!ib(p, q)) break; sr = p; sc = q; }
+  let cr = sr, cc = sc;
+  while (ib(cr, cc) && ln.length < 9) { ln.push({ r: cr, c: cc, v: b[cr][cc] }); cr += dr; cc += dc; }
+  const mi = ln.findIndex(p => p.r === r && p.c === c);
+  if (mi < 0) return false;
+  for (let s = Math.max(0, mi - 4); s <= mi && s + 4 < ln.length; s++) {
+    const w = ln.slice(s, s + 5);
+    if (w.filter(p => p.v === BLACK).length === 4 && w.filter(p => p.v === EMPTY).length === 1) {
+      const ep = w.find(p => p.v === EMPTY)!;
+      b[ep.r][ep.c] = BLACK;
+      const fi = lineInfo(b, ep.r, ep.c, dr, dc, BLACK);
+      b[ep.r][ep.c] = EMPTY;
+      if (fi.s === 5) return true;
+    }
+  }
+  return false;
 }
 
 function cntF(b: Board, r: number, c: number): number {
   let n = 0; b[r][c] = BLACK;
-  for (const [dr, dc] of DIR) { const info = lineInfo(b, r, c, dr, dc, BLACK); if (info.s === 4 && info.oe >= 1) n++; }
+  for (const [dr, dc] of DIR) if (fourDir(b, r, c, dr, dc)) n++;
   b[r][c] = EMPTY; return n;
+}
+
+function isForbidden(b: Board, r: number, c: number, depth: number): boolean {
+  if (b[r][c] !== EMPTY) return false;
+  b[r][c] = BLACK;
+  if (exact5(b, r, c)) { b[r][c] = EMPTY; return false; }
+  if (overline(b, r, c)) { b[r][c] = EMPTY; return true; }
+  b[r][c] = EMPTY;
+  if (cntF(b, r, c) >= 2) return true;
+  if (cntOT(b, r, c, depth) >= 2) return true;
+  return false;
 }
 
 export function forbidden(b: Board, r: number, c: number): ForbiddenReason | null {
@@ -113,7 +151,7 @@ export function forbidden(b: Board, r: number, c: number): ForbiddenReason | nul
   if (overline(b, r, c)) { b[r][c] = EMPTY; return "overline"; }
   b[r][c] = EMPTY;
   if (cntF(b, r, c) >= 2) return "44";
-  if (cntOT(b, r, c) >= 2) return "33";
+  if (cntOT(b, r, c, 0) >= 2) return "33";
   return null;
 }
 
